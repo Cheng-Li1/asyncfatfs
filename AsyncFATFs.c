@@ -1,19 +1,37 @@
 #include "AsyncFATFs.h"
 #include "ff15/source/diskio.h"
-#include "libblocksharedringbuffer/sddf_blk_shared_ringbuffer.h"
+#include "libblocksharedringbuffer/blk_shared_queue.h"
 #include "FiberPool/FiberPool.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 #define SD 0 /* Map SD card to physical drive 0 */
+#define RequestPool_Size 128
 
-sddf_blk_ring_handle_t *ring_handle;
+#define Coroutine_STACKSIZE 0x40000
+
+#define Client_CH 0
+#define Server_CH 1
+
+blk_queue_handle_t *ring_handle;
+
+struct sddf_fs_queue *FATfs_command_queue;
+struct sddf_fs_queue *FATfs_completion_queue;
+
+blk_req_queue_t *request;
+blk_resp_queue_t *response;
+
+void* Coroutine_STACK_ONE;
+void* Coroutine_STACK_TWO;
+void* Coroutine_STACK_THREE;
+void* Coroutine_STACK_FOUR;
 
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
     DRESULT res;
 	int result;
 	switch (pdrv) {
 	case SD :
-        sddf_blk_enqueue_cmd(ring_handle,SDDF_BLK_COMMAND_READ, (uintptr_t)buff, sector, count,Get_Cohandle());
+        blk_enqueue_req(ring_handle, READ_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
         Fiber_block();
         break;
     default:
@@ -27,7 +45,7 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
 	int result;
 	switch (pdrv) {
 	case SD :
-        sddf_blk_enqueue_cmd(ring_handle,SDDF_BLK_COMMAND_WRITE, (uintptr_t)buff, sector, count,Get_Cohandle());
+        blk_enqueue_req(ring_handle, WRITE_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
         Fiber_block();
         break;
     default:
@@ -180,3 +198,58 @@ void f_getfree_async() {
     Fiber_kill();
 }
 
+typedef struct FS_request{
+    void (*Request)(void);
+    void* data;
+} FSRequest;
+static FSRequest requestPool[RequestPool_Size];
+static uint16_t Ringhead = 0, Ringtail = 0;
+
+ASYNCFRESULT Enqueue_request(void (*Request)(void), void* data) {
+    if (((Ringtail + 1) % RequestPool_Size) == Ringhead) {
+        return ASYNCFR_TOO_MANY_REQUESTS;
+    }
+    requestPool[Ringtail].Request = Request;
+    requestPool[Ringtail].data = data;
+    
+    Ringtail = (Ringtail + 1) % RequestPool_Size;
+    return ASYNCFR_REQUEST_IN_POOL;
+}
+
+int32_t Event_Loop() {
+    while (true) {
+        
+        Fiber_yield();
+    }
+}
+
+void init(void) {
+    // Init the block device queue
+    blk_queue_init(ring_handle, request, response, 0, 
+    1024, 1024);
+
+}
+
+// mimic microkit_channel
+void notified(int ch) {
+    switch (ch) {
+    case SERIAL_RX_CH:
+        active_events |= mp_event_source_serial;
+        break;
+    case TIMER_CH:
+        active_events |= mp_event_source_timer;
+        break;
+    case VMM_CH:
+        /* We have gotten a message from the VMM, which means the framebuffer is ready. */
+        active_events |= mp_event_source_framebuffer;
+        break;
+    case NFS_CH:
+        active_events |= mp_event_source_nfs;
+        break;
+    default:
+        printf("MP|ERROR: unexpected notification received from channel: 0x%lx\n", ch);
+    }
+    if (active_events & mp_blocking_events) {
+        co_switch(t_mp);
+    }
+}
