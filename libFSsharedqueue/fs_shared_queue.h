@@ -27,7 +27,7 @@ enum {
 struct sddf_fs_command {
     uint64_t request_id;
     uint64_t cmd_type;
-    uint64_t args[4];
+    uint64_t args[6];
 };
 
 struct sddf_fs_completion {
@@ -50,6 +50,7 @@ struct sddf_fs_queue {
 
 bool sddf_fs_queue_push(struct sddf_fs_queue *queue, union sddf_fs_message message);
 bool sddf_fs_queue_pop(struct sddf_fs_queue *queue, union sddf_fs_message *message);
+bool sddf_fs_queue_IsFull(struct sddf_fs_queue *queue);
 
 struct sddf_fs_stat_64 {
 	uint64_t dev;

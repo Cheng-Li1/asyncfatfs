@@ -21,9 +21,11 @@ typedef enum {
 	ASYNCFR_NOT_ENOUGH_CORE,		/* (17) LFN working buffer could not be allocated */
 	ASYNCFR_TOO_MANY_OPEN_FILES,	/* (18) Number of open files > FF_FS_LOCK */
 	ASYNCFR_INVALID_PARAMETER,	    /* (19) Given parameter is invalid */
-    ASYNCFR_REQUEST_IN_POOL,        /* (20) Extended, Request successfully queued */
-    ASYNCFR_TOO_MANY_REQUESTS,      /* (21) Extended, Request Pool is full */
 } ASYNCFRESULT;
+
+#define Status_bit 6
+#define First_data_bit 7
+#define Second_data_bit 8
 
 struct f_open_s{
     FIL* fp;
@@ -63,6 +65,26 @@ struct f_lseek_s{
     FRESULT RET;
 };
 void f_lseek_async ();
+
+struct f_pread_s{
+    FIL* fp;
+    FSIZE_t ofs;
+    void* buff;
+    UINT btr;
+    UINT* br;
+    FRESULT RET;
+};
+void f_pread_async();
+
+struct f_pwrite_s{
+    FIL* fp;
+    FSIZE_t ofs;
+    const void* buff; 
+    UINT btw;
+    UINT* bw;
+    FRESULT RET;
+};
+void f_pwrite_async();
 
 struct f_truncate_s{
     FIL* fp;
