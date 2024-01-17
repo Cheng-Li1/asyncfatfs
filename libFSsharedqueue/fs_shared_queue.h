@@ -4,8 +4,9 @@
 #include <stdint.h>
 
 #define SDDF_FS_QUEUE_CAPACITY 5
+#define SDDF_ARGS_SIZE 6
 
-enum {
+typedef enum {
     SDDF_FS_CMD_OPEN,
     SDDF_FS_CMD_CLOSE,
     SDDF_FS_CMD_STAT,
@@ -22,12 +23,12 @@ enum {
     SDDF_FS_CMD_SEEKDIR,
     SDDF_FS_CMD_TELLDIR,
     SDDF_FS_CMD_REWINDDIR,
-};
+} FS_CMD;
 
 struct sddf_fs_command {
     uint64_t request_id;
     uint64_t cmd_type;
-    uint64_t args[6];
+    uint64_t args[SDDF_ARGS_SIZE];
 };
 
 struct sddf_fs_completion {
@@ -50,7 +51,8 @@ struct sddf_fs_queue {
 
 bool sddf_fs_queue_push(struct sddf_fs_queue *queue, union sddf_fs_message message);
 bool sddf_fs_queue_pop(struct sddf_fs_queue *queue, union sddf_fs_message *message);
-bool sddf_fs_queue_IsFull(struct sddf_fs_queue *queue);
+bool sddf_fs_queue_isFull(struct sddf_fs_queue *queue);
+bool sddf_fs_queue_isEmpty(struct sddf_fs_queue *queue);
 
 struct sddf_fs_stat_64 {
 	uint64_t dev;

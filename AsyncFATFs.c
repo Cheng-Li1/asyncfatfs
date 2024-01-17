@@ -4,6 +4,7 @@
 #include "libblocksharedqueue/blk_shared_queue.h"
 #include "FiberPool/FiberPool.h"
 #include "libFSsharedqueue/fs_shared_queue.h"
+#include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -35,17 +36,47 @@ typedef enum {
 
 typedef struct FS_request{
     /* Client side cmd info */
-    void (*Request)(void);
+    FS_CMD cmd;
     uint64_t args[9];
     uint64_t request_id;
-    /* Client side response info */
-    uint64_t data[2];
-    int32_t status;
     /* FiberPool metadata */
     co_handle handle;
     /* self metadata */
     space_status stat;
 } FSRequest;
+
+/*
+ The function array presents the function that 
+ mapped by the enum
+ typedef enum {
+    SDDF_FS_CMD_OPEN,
+    SDDF_FS_CMD_CLOSE,
+    SDDF_FS_CMD_STAT,
+    SDDF_FS_CMD_PREAD,
+    SDDF_FS_CMD_PWRITE,
+    SDDF_FS_CMD_RENAME,
+    SDDF_FS_CMD_UNLINK,
+    SDDF_FS_CMD_MKDIR,
+    SDDF_FS_CMD_RMDIR,
+    SDDF_FS_CMD_OPENDIR,
+    SDDF_FS_CMD_CLOSEDIR,
+    SDDF_FS_CMD_FSYNC,
+    SDDF_FS_CMD_READDIR,
+    SDDF_FS_CMD_SEEKDIR,
+    SDDF_FS_CMD_TELLDIR,
+    SDDF_FS_CMD_REWINDDIR,
+} FS_CMD;
+*/
+
+void (*operation_functions[])() = {
+    f_open_async,
+    f_close_async,
+    f_stat_async,
+    f_pread_async,
+    f_pwrite_async,
+    f_rename_async,
+    f_unlink_async
+};
 
 static FSRequest RequestPool[MAX_COROUTINE_NUM];
 
@@ -56,14 +87,26 @@ void Fill_Client_Response(union sddf_fs_message* message, const FSRequest* Finis
     return;
 }
 
+// Setting up the request in the requestpool and push the request to the FiberPool
+void SetUp_request(int32_t index, union sddf_fs_message message) {
+    RequestPool[index].request_id = message.command.request_id;
+    RequestPool[index].cmd = message.command.cmd_type;
+    memcpy(RequestPool[index].args, message.command.args, SDDF_ARGS_SIZE * sizeof(uint64_t));
+    FiberPool_push(operation_functions[RequestPool[index].cmd], RequestPool[index].args, 
+      2, &(RequestPool[index].handle));
+    return;
+}
+
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
     DRESULT res;
 	int result;
 	switch (pdrv) {
-	case SD :
+	case SD : {
         blk_enqueue_req(blk_queue_handle, READ_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
         Fiber_block();
+        res = (DRESULT)(uintptr_t)Fiber_GetArgs();
         break;
+    }
     default:
         res = RES_PARERR;
 	}
@@ -77,6 +120,7 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
 	case SD :
         blk_enqueue_req(blk_queue_handle, WRITE_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
         Fiber_block();
+        res = (DRESULT)(uintptr_t)Fiber_GetArgs();
         break;
     default:
         res = RES_PARERR;
@@ -88,18 +132,23 @@ void init(void) {
     // Init the block device queue
     blk_queue_init(blk_queue_handle, request, response, 0, 
     1024, 1024);
-
+    
 }
 
 // mimic microkit_channel
 void notified(int ch) {
+    union sddf_fs_message message;
     switch (ch) {
     case Client_CH: {
-        union sddf_fs_message* message = NULL;
-        while (sddf_fs_queue_pop(FATfs_command_queue, message)) {
-            
+        while (!sddf_fs_queue_isEmpty(FATfs_command_queue)) {
+            int32_t index = FiberPool_FindFree();
+            // If index is invalid, then all coroutines are busy
+            if (index == INVALID_COHANDLE) {
+                break;
+            }
+            sddf_fs_queue_pop(FATfs_command_queue, &message);
+            SetUp_request(index, message);
         }
-        break;
     }
     case Server_CH: {
         blk_response_status_t *status;
@@ -125,12 +174,21 @@ void notified(int ch) {
        responses.
     **/
     int32_t i;
-    union sddf_fs_message message;
+    /* This part is to check the finished coroutine result and send the results back through SDDF */
     for (i = 1; i < MAX_COROUTINE_NUM; i++) {
         if (RequestPool[i].handle == INVALID_COHANDLE && RequestPool[i].stat == INUSE) {
             message.completion.request_id = RequestPool[i].request_id;
             Fill_Client_Response(&message, &(RequestPool[i]));
             sddf_fs_queue_push(FATfs_completion_queue, message);
         }
+    }
+    while (!sddf_fs_queue_isEmpty(FATfs_command_queue)) {
+        int32_t index = FiberPool_FindFree();
+        // If index is invalid, then all coroutines are busy
+        if (index == INVALID_COHANDLE) {
+            break;
+        }
+        sddf_fs_queue_pop(FATfs_command_queue, &message);
+        SetUp_request(index, message);
     }
 }

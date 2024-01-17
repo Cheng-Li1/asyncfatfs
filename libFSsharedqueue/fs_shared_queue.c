@@ -26,10 +26,16 @@ bool sddf_fs_queue_pop(struct sddf_fs_queue *queue, union sddf_fs_message *messa
     return true;
 }
 
-bool sddf_fs_queue_IsFull(struct sddf_fs_queue *queue) {
+bool sddf_fs_queue_isFull(struct sddf_fs_queue *queue) {
     if (queue->size == SDDF_FS_QUEUE_CAPACITY) {
         return true;
     }
     return false;
 }
 
+bool sddf_fs_queue_isEmpty(struct sddf_fs_queue *queue) {
+    if (queue->size == 0) {
+        return true;
+    }
+    return false;
+}
