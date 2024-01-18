@@ -130,9 +130,19 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
 
 void init(void) {
     // Init the block device queue
+    // Have to make sure who initialize this SDDF queue
     blk_queue_init(blk_queue_handle, request, response, 0, 
     1024, 1024);
-    
+    struct stack_mem stackmem[4];
+    stackmem[0].memory = Coroutine_STACK_ONE;
+    stackmem[0].size = Coroutine_STACKSIZE;
+    stackmem[1].memory = Coroutine_STACK_TWO;
+    stackmem[1].size = Coroutine_STACKSIZE;
+    stackmem[2].memory = Coroutine_STACK_THREE;
+    stackmem[2].size = Coroutine_STACKSIZE;
+    stackmem[3].memory = Coroutine_STACK_FOUR;
+    stackmem[3].size = Coroutine_STACKSIZE;
+    FiberPool_init(stackmem, 4, 1);
 }
 
 // mimic microkit_channel
@@ -140,7 +150,8 @@ void notified(int ch) {
     union sddf_fs_message message;
     switch (ch) {
     case Client_CH: {
-        while (!sddf_fs_queue_isEmpty(FATfs_command_queue)) {
+    while (!sddf_fs_queue_isEmpty(FATfs_command_queue) && 
+             !sddf_fs_queue_isFull(FATfs_completion_queue)) {
             int32_t index = FiberPool_FindFree();
             // If index is invalid, then all coroutines are busy
             if (index == INVALID_COHANDLE) {
@@ -182,7 +193,8 @@ void notified(int ch) {
             sddf_fs_queue_push(FATfs_completion_queue, message);
         }
     }
-    while (!sddf_fs_queue_isEmpty(FATfs_command_queue)) {
+    while (!sddf_fs_queue_isEmpty(FATfs_command_queue) && 
+             !sddf_fs_queue_isFull(FATfs_completion_queue)) {
         int32_t index = FiberPool_FindFree();
         // If index is invalid, then all coroutines are busy
         if (index == INVALID_COHANDLE) {
