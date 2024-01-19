@@ -146,21 +146,17 @@ void init(void) {
 }
 
 // mimic microkit_channel
+/*
+  The filesystems should be blockwait for new message if and only if all of working
+  coroutines are either free(no tasks assigned to them, no pending replies) or blocked in diskio.
+  If filesystem is blocked here and any working coroutines are free, then the FATfs_command_queue must
+  also be empty.
+*/
 void notified(int ch) {
     union sddf_fs_message message;
     switch (ch) {
-    case Client_CH: {
-    while (!sddf_fs_queue_isEmpty(FATfs_command_queue) && 
-             !sddf_fs_queue_isFull(FATfs_completion_queue)) {
-            int32_t index = FiberPool_FindFree();
-            // If index is invalid, then all coroutines are busy
-            if (index == INVALID_COHANDLE) {
-                break;
-            }
-            sddf_fs_queue_pop(FATfs_command_queue, &message);
-            SetUp_request(index, message);
-        }
-    }
+    case Client_CH: 
+        break;
     case Server_CH: {
         blk_response_status_t *status;
         uintptr_t *addr;
@@ -175,32 +171,57 @@ void notified(int ch) {
         break;
     }
     default:
-        break;
+        return;
     }
-    Fiber_yield();
     /** 
        If the code below get executed, then all the working coroutines are either blocked or finished.
        So the code below would send the result back to client through SDDF and do the cleanup for finished 
        coroutines. After that, the main coroutine coroutine would block wait on new requests or server sending
        responses.
     **/
+    int32_t index;
     int32_t i;
-    /* This part is to check the finished coroutine result and send the results back through SDDF */
-    for (i = 1; i < MAX_COROUTINE_NUM; i++) {
-        if (RequestPool[i].handle == INVALID_COHANDLE && RequestPool[i].stat == INUSE) {
-            message.completion.request_id = RequestPool[i].request_id;
-            Fill_Client_Response(&message, &(RequestPool[i]));
-            sddf_fs_queue_push(FATfs_completion_queue, message);
+    bool Client_have_replies = false;
+    bool New_request_pushed;
+    /**
+      I assume this big while loop is the confusing and critical part for dispatching coroutines and send back the results.
+    **/
+    while (true) {
+        Fiber_yield();
+        // Should somehow notify the block device to work here
+        /*
+          This for loop check if there are coroutines finished and send the result back
+        */
+        New_request_pushed = false;
+        for (i = 1; i < MAX_COROUTINE_NUM; i++) {
+            if (RequestPool[i].handle == INVALID_COHANDLE && RequestPool[i].stat == INUSE) {
+                message.completion.request_id = RequestPool[i].request_id;
+                Fill_Client_Response(&message, &(RequestPool[i]));
+                sddf_fs_queue_push(FATfs_completion_queue, message);
+                RequestPool[i].stat= FREE;
+                Client_have_replies = true;
+            }
         }
-    }
-    while (!sddf_fs_queue_isEmpty(FATfs_command_queue) && 
-             !sddf_fs_queue_isFull(FATfs_completion_queue)) {
-        int32_t index = FiberPool_FindFree();
-        // If index is invalid, then all coroutines are busy
-        if (index == INVALID_COHANDLE) {
+        /*
+          This should pop the request from the command_queue to the FiberPool to execute, if no new request is 
+          popped, we should exit the whole while loop.
+        */
+        while (true) {
+            index = FiberPool_FindFree();
+            if (index == INVALID_COHANDLE || sddf_fs_queue_isEmpty(FATfs_command_queue) 
+                  || sddf_fs_queue_isFull(FATfs_completion_queue)) {
+               break;
+            }
+            sddf_fs_queue_pop(FATfs_command_queue, &message);
+            SetUp_request(index, message);
+            RequestPool[index].stat = INUSE;
+            New_request_pushed = true;
+        }
+        if (New_request_pushed == false) {
             break;
         }
-        sddf_fs_queue_pop(FATfs_command_queue, &message);
-        SetUp_request(index, message);
+    }
+    if (Client_have_replies == true) {
+        // Notify client here
     }
 }

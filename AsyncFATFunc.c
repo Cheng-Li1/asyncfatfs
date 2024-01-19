@@ -2,6 +2,11 @@
 #include "ff15/source/ff.h"
 #include "FiberPool/FiberPool.h"
 
+/*
+This file define a bunch of wrapper functions of FATFs functions so thos functions can be run in the 
+coroutine.
+*/
+
 void Function_Fill_Response(void* data, FRESULT result, uint64_t RETDATA, uint64_t RETDATA2) {
     uint64_t *args = (uint64_t *) data;
     args[Status_bit] = result;
