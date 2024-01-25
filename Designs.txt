@@ -1,0 +1,73 @@
+Informal document about Async File System on Lions OS
+Challenges to have an effient file system on microkernel
+Most of the file system that are there are synchronous file systems. Those synchronous file systems, though work great for monolithic
+kernel(or any kernels that threads from user application directly execute file systems code), would perform terrible for if it runs on 
+a single thread in the userspace. This is because 
+
+
+
+Implementation details-- What is happening inside tranform a sync FATfs to an async FATfs
+Key design innovation
+My thought of modifying a sync system to an async system rely on the cooperative multitasking. For any systems that involves block
+operation(e.g. disk IO), that blocking function should be write like this way:
+
+function disk_write():
+    // Initiates a non-blocking write request to the block device driver through SDDF
+    sddf_enqueue_write_request(id, buffer...)
+
+    // Blocks the current task, allowing the system to execute other tasks
+    block_myself()
+
+    // On resuming, checks the result of the write operation
+    Get_result_and_check()
+end function
+
+and in the event loop:
+function notify():
+    // Triggered when a write request completion is notified by the block device driver
+    // Dequeue the response from sddf and parse the results
+    sddf_dequeue_and_parse_res()
+
+    // Wakes up the task that was blocked (waiting for this operation to complete)
+    wakeup(sleeped_task)
+
+    // Yields control back to the system for other tasks to execute
+    Yield()
+end function
+
+By doing this, the task will be paused during the IO operation and the scheduler would be able to let the thread run another task.
+
+FiberFlow
+A complete rewrite version of the libco that adjust the handle memory layout to avoid stack overflow cause undefined behavior, 
+fixed a bunch of other minor issues in the implementation and added addtional functionality(pass in/retrieve args)
+
+FiberPool
+A wrapper around the FiberFlow which implement Fiber life circle management, Memory Stack Management and Cooperative Multitasking.
+FiberPool enables we to use the coroutine like using threads.
+
+Interaction with block device side SDDF
+
+
+Interaction with client side SDDF
+
+
+
+Limitation of FAT file systems
+
+1. Power off corrupts data
+2. No software side wear leveling
+3. No cache
+
+
+Informal document about Async File System on Lions OS
+
+Most existing file systems are designed to operate synchronously. While these synchronous file systems are well-suited for monolithic kernels — where user application threads directly execute file system code — they can be significantly less efficient in a different context. Specifically, running a synchronous file system on a single thread in userspace, as is common in microkernel architectures, presents notable challenges. The primary issue arises from the inherent nature of how the I/O operations are dealt with in microkernel. 
+
+In a synchronous file system, when a user-level application issues an I/O request, the thread handling the request becomes blocked until the I/O operation completes. This model works effectively in monolithic kernels primarily because user-level threads can directly execute kernel code, including file system operations. In a monolithic kernel, when a user-level application makes a system call related to file operations, it directly enters kernel mode to execute the corresponding file system code. The context switch for monolithic kernel only happens when the user-level thread initiate the IO(ignoring the situation when its time slice running out), and the scheduler would pick another thread to run. But things go a lot more complex in microkernel, the context switch would typically go this way: user-level application -> syscall Interface -> file system -> block device driver (And go through kernel in each context switches), which adds overhead. What make things even worse is, the file system needs to be running on a single thread, Which make block waiting strategy that works great in Monokernel works bad due to only able to deal with one request at a time and underutilize of CPU time slice. 
+
+Key principle in design:
+1. Minimise the context switch under heavy work loads.
+2. The file system, which is naturally IO intensive, would need to be able to concurrently executing several requests concurrently to fully utilize its cpu time slices.
+3. The file system, as it runs on a single thread, must be async to be able to integrate with block device SDDF and Client SDDF. which means that in a diskIO operation, the file system should not block waiting there but should return to the event loop to listen to new requests and response.
+
+With those thought in head, I present a way of transforming any sync systems that involves blocking operations to a event-based, async system through cooperative multitasking.
