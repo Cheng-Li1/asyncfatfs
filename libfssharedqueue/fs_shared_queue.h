@@ -7,6 +7,7 @@
 #define SDDF_ARGS_SIZE 6
 
 typedef enum {
+    SDDF_FS_CMD_MOUNT,
     SDDF_FS_CMD_OPEN,
     SDDF_FS_CMD_CLOSE,
     SDDF_FS_CMD_STAT,
@@ -14,6 +15,8 @@ typedef enum {
     SDDF_FS_CMD_PWRITE,
     SDDF_FS_CMD_RENAME,
     SDDF_FS_CMD_UNLINK,
+    /*
+    Not exposed to client yet
     SDDF_FS_CMD_MKDIR,
     SDDF_FS_CMD_RMDIR,
     SDDF_FS_CMD_OPENDIR,
@@ -23,6 +26,7 @@ typedef enum {
     SDDF_FS_CMD_SEEKDIR,
     SDDF_FS_CMD_TELLDIR,
     SDDF_FS_CMD_REWINDDIR,
+    */
 } FS_CMD;
 
 struct sddf_fs_command {
@@ -46,7 +50,6 @@ struct sddf_fs_queue {
     union sddf_fs_message buffer[SDDF_FS_QUEUE_CAPACITY];
     uint32_t read_index;
     uint32_t write_index;
-    uint32_t size;
 };
 
 bool sddf_fs_queue_push(struct sddf_fs_queue *queue, union sddf_fs_message message);

@@ -202,3 +202,11 @@ struct f_getfree_s {
     FRESULT RET;
 };
 void f_getfree_async();
+
+struct f_mount_s {
+    FATFS* fs;
+    const TCHAR* path;
+    BYTE opt;
+    FRESULT RET;
+};
+void f_mount_async();

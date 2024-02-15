@@ -204,3 +204,10 @@ void f_getfree_async() {
     Function_Fill_Response(args, args->RET, 0, 0);
     Fiber_kill();
 }
+
+void f_mount_async() {
+    struct f_mount_s* args = Fiber_GetArgs();
+    args->RET = f_mount(args->fs, args->path, args->opt);
+    Function_Fill_Response(args, args->RET, 0, 0);
+    Fiber_kill();
+}

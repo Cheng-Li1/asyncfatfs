@@ -3,7 +3,7 @@
 #include "ff15/source/ff.h"
 #include "libblocksharedqueue/blk_shared_queue.h"
 #include "FiberPool/FiberPool.h"
-#include "libFSsharedqueue/fs_shared_queue.h"
+#include "libfssharedqueue/fs_shared_queue.h"
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -69,6 +69,7 @@ typedef struct FS_request{
 */
 
 void (*operation_functions[])() = {
+    f_mount_async,
     f_open_async,
     f_close_async,
     f_stat_async,
@@ -131,7 +132,7 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
 void init(void) {
     // Init the block device queue
     // Have to make sure who initialize this SDDF queue
-    blk_queue_init(blk_queue_handle, request, response, 0, 
+    blk_queue_init(blk_queue_handle, request, response, false, 
     1024, 1024);
     struct stack_mem stackmem[4];
     stackmem[0].memory = Coroutine_STACK_ONE;
