@@ -183,11 +183,11 @@ void notified(int ch) {
     int32_t index;
     int32_t i;
     bool Client_have_replies = false;
-    bool New_request_pushed;
+    bool New_request_pushed = true;
     /**
       I assume this big while loop is the confusing and critical part for dispatching coroutines and send back the results.
     **/
-    while (true) {
+    while (New_request_pushed) {
         Fiber_yield();
         // Should somehow notify the block device to work here
         /*
@@ -217,9 +217,6 @@ void notified(int ch) {
             SetUp_request(index, message);
             RequestPool[index].stat = INUSE;
             New_request_pushed = true;
-        }
-        if (New_request_pushed == false) {
-            break;
         }
     }
     if (Client_have_replies == true) {
