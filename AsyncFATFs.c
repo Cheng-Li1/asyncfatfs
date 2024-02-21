@@ -1,6 +1,6 @@
 #include "AsyncFATFs.h"
-#include "ff15/source/diskio.h"
 #include "ff15/source/ff.h"
+#include "ff15/source/diskio.h"
 #include "libblocksharedqueue/blk_shared_queue.h"
 #include "FiberPool/FiberPool.h"
 #include "libfssharedqueue/fs_shared_queue.h"
@@ -8,7 +8,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define SD 0 /* Map SD card to physical drive 0 */
 #define RequestPool_Size 128
 
 #define Coroutine_STACKSIZE 0x40000
@@ -96,37 +95,6 @@ void SetUp_request(int32_t index, union sddf_fs_message message) {
     FiberPool_push(operation_functions[RequestPool[index].cmd], RequestPool[index].args, 
       2, &(RequestPool[index].handle));
     return;
-}
-
-DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
-    DRESULT res;
-	int result;
-	switch (pdrv) {
-	case SD : {
-        blk_enqueue_req(blk_queue_handle, READ_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
-        Fiber_block();
-        res = (DRESULT)(uintptr_t)Fiber_GetArgs();
-        break;
-    }
-    default:
-        res = RES_PARERR;
-	}
-    return res;
-}
-
-DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
-    DRESULT res;
-	int result;
-	switch (pdrv) {
-	case SD :
-        blk_enqueue_req(blk_queue_handle, WRITE_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
-        Fiber_block();
-        res = (DRESULT)(uintptr_t)Fiber_GetArgs();
-        break;
-    default:
-        res = RES_PARERR;
-	}
-    return res;
 }
 
 void init(void) {

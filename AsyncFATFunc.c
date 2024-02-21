@@ -26,6 +26,13 @@ FRESULT f_sync (FIL* fp);
 FRESULT f_mount (FATFS* fs, const TCHAR* path, BYTE opt);					
 */
 
+void f_mount_async() {
+    struct f_mount_s* args = Fiber_GetArgs();
+    args->RET = f_mount(args->fs, args->path, args->opt);
+    Function_Fill_Response(args, args->RET, 0, 0);
+    Fiber_kill();
+}
+
 void f_open_async() {
     struct f_open_s* args = Fiber_GetArgs();
     args->RET = f_open(args->fp, args->path, args->mode);
@@ -120,20 +127,21 @@ void f_readdir_async() {
     Function_Fill_Response(args, args->RET, 0, 0);
     Fiber_kill();
 }
-
+/*
 void f_findfirst_async() {
     struct f_findfirst_s* args = Fiber_GetArgs();
     args->RET = f_findfirst(args->dp, args->fno, args->path, args->pattern);
     Function_Fill_Response(args, args->RET, 0, 0);
     Fiber_kill();
-}
+}*/
 
+/*
 void f_findnext_async() {
     struct f_findnext_s* args = Fiber_GetArgs();
     args->RET = f_findnext(args->dp, args->fno);
     Function_Fill_Response(args, args->RET, 0, 0);
     Fiber_kill();
-}
+}*/
 
 void f_mkdir_async() {
     struct f_mkdir_s* args = Fiber_GetArgs();
@@ -163,51 +171,50 @@ void f_stat_async() {
     Fiber_kill();
 }
 
+/*
 void f_chmod_async() {
     struct f_chmod_s* args = Fiber_GetArgs();
     args->RET = f_chmod(args->path, args->attr, args->mask);
     Function_Fill_Response(args, args->RET, 0, 0);
     Fiber_kill();
-}
+}*/
 
+/*
 void f_utime_async() {
     struct f_utime_s* args = Fiber_GetArgs();
     args->RET = f_utime(args->path, args->fno);
     Function_Fill_Response(args, args->RET, 0, 0);
     Fiber_kill();
 }
-
+*/
+/*
 void f_chdir_async() {
     struct f_chdir_s* args = Fiber_GetArgs();
     args->RET = f_chdir(args->path);
     Function_Fill_Response(args, args->RET, 0, 0);
     Fiber_kill();
-}
+}*/
 
+/*
 void f_chdrive_async() {
     struct f_chdrive_s* args = Fiber_GetArgs();
     args->RET = f_chdrive(args->path);
     Function_Fill_Response(args, args->RET, 0, 0);
     Fiber_kill();
 }
+*/
 
+/*
 void f_getcwd_async() {
     struct f_getcwd_s* args = Fiber_GetArgs();
     args->RET = f_getcwd(args->buff, args->len);
     Function_Fill_Response(args, args->RET, 0, 0);
     Fiber_kill();
 }
-
+*/
 void f_getfree_async() {
     struct f_getfree_s* args = Fiber_GetArgs();
     args->RET = f_getfree(args->path, args->nclst, args->fatfs);
-    Function_Fill_Response(args, args->RET, 0, 0);
-    Fiber_kill();
-}
-
-void f_mount_async() {
-    struct f_mount_s* args = Fiber_GetArgs();
-    args->RET = f_mount(args->fs, args->path, args->opt);
     Function_Fill_Response(args, args->RET, 0, 0);
     Fiber_kill();
 }
