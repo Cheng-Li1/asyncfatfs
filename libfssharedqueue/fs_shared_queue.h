@@ -56,6 +56,7 @@ bool sddf_fs_queue_push(struct sddf_fs_queue *queue, union sddf_fs_message messa
 bool sddf_fs_queue_pop(struct sddf_fs_queue *queue, union sddf_fs_message *message);
 bool sddf_fs_queue_isFull(struct sddf_fs_queue *queue);
 bool sddf_fs_queue_isEmpty(struct sddf_fs_queue *queue);
+void sddf_fs_init(struct sddf_fs_queue *queue);
 
 struct sddf_fs_stat_64 {
 	uint64_t dev;

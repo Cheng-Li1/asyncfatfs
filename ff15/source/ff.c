@@ -6819,6 +6819,15 @@ static double i10x (int n)	/* Calculate 10^n in integer input */
 }
 
 
+/* Be extremely careful here, this modification is to provide simple implementation for isnan and isinf as these are not in musllibc */
+int my_isinf(double val) {
+    return val == (double)INFINITY || val == (double)-INFINITY;
+}
+
+int my_isnan(double val) {
+    return val != val;
+}
+
 static void ftoa (
 	char* buf,	/* Buffer to output the floating point string */
 	double val,	/* Value to output */
@@ -6834,7 +6843,7 @@ static void ftoa (
 	const char ds = FF_PRINT_FLOAT == 2 ? ',' : '.';
 
 
-	if (isnan(val)) {			/* Not a number? */
+	if (my_isnan(val)) {			/* Not a number? */
 		er = "NaN";
 	} else {
 		if (prec < 0) prec = 6;	/* Default precision? (6 fractional digits) */
@@ -6843,7 +6852,7 @@ static void ftoa (
 		} else {
 			sign = '+';
 		}
-		if (isinf(val)) {		/* Infinite? */
+		if (my_isinf(val)) {		/* Infinite? */
 			er = "INF";
 		} else {
 			if (fmt == 'f') {	/* Decimal notation? */

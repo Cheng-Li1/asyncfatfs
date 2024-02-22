@@ -17,7 +17,7 @@ DSTATUS disk_initialize (
 	int result;
 
 	switch (pdrv) {
-	case SD :
+	default:
 		return RES_OK;
 	}
 	return STA_NOINIT;
@@ -31,7 +31,7 @@ DSTATUS disk_status (
 	int result;
 
 	switch (pdrv) {
-	case SD :
+	default:
 
 		return RES_OK;
 	}
@@ -41,15 +41,12 @@ DSTATUS disk_status (
 DRESULT disk_ioctl (BYTE pdrv, BYTE cmd, void* buff) {
     DRESULT res;
     switch (pdrv) {
-	case SD : {
+    default:
         if (cmd == GET_SECTOR_SIZE) {
             WORD *size = buff;
             *size = 512;
             res = RES_OK;
         }
-    }
-    default:
-        res = RES_PARERR;
 	}
     return res;
 }
@@ -57,14 +54,12 @@ DRESULT disk_ioctl (BYTE pdrv, BYTE cmd, void* buff) {
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
     DRESULT res;
 	switch (pdrv) {
-	case SD : {
+	default: {
         blk_enqueue_req(blk_queue_handle, READ_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
         Fiber_block();
         res = (DRESULT)(uintptr_t)Fiber_GetArgs();
         break;
     }
-    default:
-        res = RES_PARERR;
 	}
     return res;
 }
@@ -72,13 +67,11 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
     DRESULT res;
 	switch (pdrv) {
-	case SD :
+	default:
         blk_enqueue_req(blk_queue_handle, WRITE_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
         Fiber_block();
         res = (DRESULT)(uintptr_t)Fiber_GetArgs();
         break;
-    default:
-        res = RES_PARERR;
 	}
     return res;
 }

@@ -7,15 +7,18 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <microkit.h>
+#include "../../vmm/src/util/printf.h"
 
 #define RequestPool_Size 128
 
 #define Coroutine_STACKSIZE 0x40000
 
-#define Client_CH 0
-#define Server_CH 1
+#define Client_CH 1
+#define Server_CH 2
 
-blk_queue_handle_t *blk_queue_handle;
+blk_queue_handle_t blk_queue_handle_memory;
+blk_queue_handle_t *blk_queue_handle = &blk_queue_handle_memory;
 
 struct sddf_fs_queue *FATfs_command_queue;
 struct sddf_fs_queue *FATfs_completion_queue;
@@ -100,8 +103,8 @@ void SetUp_request(int32_t index, union sddf_fs_message message) {
 void init(void) {
     // Init the block device queue
     // Have to make sure who initialize this SDDF queue
-    blk_queue_init(blk_queue_handle, request, response, false, 
-    1024, 1024);
+    blk_queue_init(blk_queue_handle, request, response, true, 
+    BLK_REQ_QUEUE_SIZE, BLK_RESP_QUEUE_SIZE);
     struct stack_mem stackmem[4];
     stackmem[0].memory = Coroutine_STACK_ONE;
     stackmem[0].size = Coroutine_STACKSIZE;
@@ -121,21 +124,22 @@ void init(void) {
   If filesystem is blocked here and any working coroutines are free, then the FATfs_command_queue must
   also be empty.
 */
-void notified(int ch) {
+void notified(microkit_channel ch) {
+    printf("FS RIQ received: %d\n", ch);
     union sddf_fs_message message;
     switch (ch) {
     case Client_CH: 
         break;
     case Server_CH: {
-        blk_response_status_t *status;
-        uintptr_t *addr;
-        uint16_t *count;
-        uint16_t *success_count;
-        uint32_t *id;
+        blk_response_status_t status;
+        uintptr_t addr;
+        uint16_t count;
+        uint16_t success_count;
+        uint32_t id;
         while (!blk_req_queue_empty(blk_queue_handle)) {
-            blk_dequeue_resp(blk_queue_handle, status, addr, count, success_count, id);
-            FiberPool_SetArgs(RequestPool[*id].handle, (void* )(*status));
-            Fiber_wake(RequestPool[*id].handle);
+            blk_dequeue_resp(blk_queue_handle, &status, &addr, &count, &success_count, &id);
+            FiberPool_SetArgs(RequestPool[id].handle, (void* )(status));
+            Fiber_wake(RequestPool[id].handle);
         }
         break;
     }
@@ -156,8 +160,13 @@ void notified(int ch) {
       I assume this big while loop is the confusing and critical part for dispatching coroutines and send back the results.
     **/
     while (New_request_pushed) {
-        Fiber_yield();
-        // Should somehow notify the block device to work here
+        // Performance bug here, should check if the reason being wake up is from notification from the blk device driver
+        // Then decide to yield() or not
+        // And should only send back notification to blk device driver if at least one coroutine is block waiting
+        if (Get_Cohandle() != Fiber_next()) {
+            Fiber_yield();
+            microkit_notify(Server_CH);
+        }
         /*
           This for loop check if there are coroutines finished and send the result back
         */
@@ -188,6 +197,6 @@ void notified(int ch) {
         }
     }
     if (Client_have_replies == true) {
-        // Notify client here
+        microkit_notify(Client_CH);
     }
 }
