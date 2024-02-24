@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "libblocksharedqueue/blk_shared_queue.h"
 #include "FiberPool/FiberPool.h"
+#include "../../vmm/src/util/printf.h"
 
 #define SD 0 /* Map SD card to physical drive 0 */
 
@@ -55,6 +56,7 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
     DRESULT res;
 	switch (pdrv) {
 	default: {
+		printf_("blk_enqueue_req: addr: 0x%lx sector: %ld, count: %ld ID: %ld\n", buff, sector, count, Get_Cohandle());
         blk_enqueue_req(blk_queue_handle, READ_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
         Fiber_block();
         res = (DRESULT)(uintptr_t)Fiber_GetArgs();

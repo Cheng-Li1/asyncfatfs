@@ -39,7 +39,7 @@ bool sddf_fs_queue_isEmpty(struct sddf_fs_queue *queue) {
     return false;
 }
 
-// Only server init the queue!
+// Only client init the queue!
 void sddf_fs_init(struct sddf_fs_queue *queue) {
     queue->write_index = 0;
     queue->read_index = 0;

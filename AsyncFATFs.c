@@ -26,6 +26,9 @@ struct sddf_fs_queue *FATfs_completion_queue;
 blk_req_queue_t *request;
 blk_resp_queue_t *response;
 
+// Compromised code here
+blk_storage_info_t *config;
+
 void* Coroutine_STACK_ONE;
 void* Coroutine_STACK_TWO;
 void* Coroutine_STACK_THREE;
@@ -125,8 +128,11 @@ void init(void) {
   also be empty.
 */
 void notified(microkit_channel ch) {
-    printf("FS RIQ received: %d\n", ch);
+    //printf("FS IRQ received: %d\n", ch);
     union sddf_fs_message message;
+// Compromised code here, polling for server's state until it is ready
+    while (!config->ready) {}
+
     switch (ch) {
     case Client_CH: 
         break;
@@ -136,8 +142,11 @@ void notified(microkit_channel ch) {
         uint16_t count;
         uint16_t success_count;
         uint32_t id;
-        while (!blk_req_queue_empty(blk_queue_handle)) {
+        while (!blk_resp_queue_empty(blk_queue_handle)) {
             blk_dequeue_resp(blk_queue_handle, &status, &addr, &count, &success_count, &id);
+            // Debug print
+            printf_("blk_dequeue_resp: addr: 0x%lx count: %d success_count: %d ID: %d\n", addr, count, success_count, id);
+
             FiberPool_SetArgs(RequestPool[id].handle, (void* )(status));
             Fiber_wake(RequestPool[id].handle);
         }

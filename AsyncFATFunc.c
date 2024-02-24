@@ -73,6 +73,7 @@ void f_pread_async() {
     args->RET = f_lseek(args->fp, args->ofs);
     if (args->RET != ASYNCFR_OK) {
         args->br = 0;
+        Function_Fill_Response(args, args->RET, 0, 0);
         Fiber_kill();
     }
     args->RET = f_read(args->fp, args->buff, args->btr, args->br);
@@ -85,6 +86,7 @@ void f_pwrite_async() {
     args->RET = f_lseek(args->fp, args->ofs);
     if (args->RET != ASYNCFR_OK) {
         args->bw = 0;
+        Function_Fill_Response(args, args->RET, 0, 0);
         Fiber_kill();
     }
     args->RET = f_write(args->fp, args->buff, args->btw, args->bw);
