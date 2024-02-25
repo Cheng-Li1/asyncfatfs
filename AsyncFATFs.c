@@ -34,6 +34,8 @@ void* Coroutine_STACK_TWO;
 void* Coroutine_STACK_THREE;
 void* Coroutine_STACK_FOUR;
 
+bool blk_request_pushed;
+
 typedef enum {
     FREE,
     INUSE
@@ -172,8 +174,9 @@ void notified(microkit_channel ch) {
         // Performance bug here, should check if the reason being wake up is from notification from the blk device driver
         // Then decide to yield() or not
         // And should only send back notification to blk device driver if at least one coroutine is block waiting
-        if (Get_Cohandle() != Fiber_next()) {
-            Fiber_yield();
+        blk_request_pushed = false;
+        Fiber_yield();
+        if (blk_request_pushed == true) {
             microkit_notify(Server_CH);
         }
         /*

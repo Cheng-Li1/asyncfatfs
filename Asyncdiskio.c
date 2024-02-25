@@ -10,6 +10,8 @@
 
 extern blk_queue_handle_t *blk_queue_handle;
 
+extern bool blk_request_pushed;
+
 DSTATUS disk_initialize (
 	BYTE pdrv				/* Physical drive nmuber to identify the drive */
 )
@@ -33,7 +35,6 @@ DSTATUS disk_status (
 
 	switch (pdrv) {
 	default:
-
 		return RES_OK;
 	}
 	return STA_NOINIT;
@@ -48,6 +49,14 @@ DRESULT disk_ioctl (BYTE pdrv, BYTE cmd, void* buff) {
             *size = 512;
             res = RES_OK;
         }
+        if (cmd == CTRL_SYNC) {
+			res = RES_OK;
+			printf_("blk_enqueue_syncreq\n");
+			blk_enqueue_req(blk_queue_handle, FLUSH, 0, 0, 0,Get_Cohandle());
+			blk_request_pushed = true;
+			Fiber_block();
+			res = (DRESULT)(uintptr_t)Fiber_GetArgs();
+        }
 	}
     return res;
 }
@@ -56,8 +65,9 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
     DRESULT res;
 	switch (pdrv) {
 	default: {
-		printf_("blk_enqueue_req: addr: 0x%lx sector: %ld, count: %ld ID: %ld\n", buff, sector, count, Get_Cohandle());
+		printf_("blk_enqueue_readreq: addr: 0x%lx sector: %ld, count: %ld ID: %ld\n", buff, sector, count, Get_Cohandle());
         blk_enqueue_req(blk_queue_handle, READ_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
+		blk_request_pushed = true;
         Fiber_block();
         res = (DRESULT)(uintptr_t)Fiber_GetArgs();
         break;
@@ -70,7 +80,9 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
     DRESULT res;
 	switch (pdrv) {
 	default:
+	    printf_("blk_enqueue_writereq: addr: 0x%lx sector: %ld, count: %ld ID: %ld\n", buff, sector, count, Get_Cohandle());
         blk_enqueue_req(blk_queue_handle, WRITE_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
+		blk_request_pushed = true;
         Fiber_block();
         res = (DRESULT)(uintptr_t)Fiber_GetArgs();
         break;
