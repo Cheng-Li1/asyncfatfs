@@ -4,7 +4,9 @@
 #include <stdint.h>
 #include "libblocksharedqueue/blk_shared_queue.h"
 #include "FiberPool/FiberPool.h"
+#ifdef FS_DEBUG_PRINT
 #include "../../vmm/src/util/printf.h"
+#endif
 
 #define SD 0 /* Map SD card to physical drive 0 */
 
@@ -51,7 +53,9 @@ DRESULT disk_ioctl (BYTE pdrv, BYTE cmd, void* buff) {
         }
         if (cmd == CTRL_SYNC) {
 			res = RES_OK;
+			#ifdef FS_DEBUG_PRINT
 			printf_("blk_enqueue_syncreq\n");
+			#endif
 			blk_enqueue_req(blk_queue_handle, FLUSH, 0, 0, 0,Get_Cohandle());
 			blk_request_pushed = true;
 			Fiber_block();
@@ -65,7 +69,9 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
     DRESULT res;
 	switch (pdrv) {
 	default: {
+		#ifdef FS_DEBUG_PRINT
 		printf_("blk_enqueue_readreq: addr: 0x%lx sector: %ld, count: %ld ID: %ld\n", buff, sector, count, Get_Cohandle());
+		#endif
         blk_enqueue_req(blk_queue_handle, READ_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
 		blk_request_pushed = true;
         Fiber_block();
@@ -80,7 +86,9 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
     DRESULT res;
 	switch (pdrv) {
 	default:
+	    #ifdef FS_DEBUG_PRINT
 	    printf_("blk_enqueue_writereq: addr: 0x%lx sector: %ld, count: %ld ID: %ld\n", buff, sector, count, Get_Cohandle());
+		#endif
         blk_enqueue_req(blk_queue_handle, WRITE_BLOCKS, (uintptr_t)buff, sector, count,Get_Cohandle());
 		blk_request_pushed = true;
         Fiber_block();

@@ -8,7 +8,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <microkit.h>
-#include "../../vmm/src/util/printf.h"
 
 #define RequestPool_Size 128
 
@@ -16,6 +15,10 @@
 
 #define Client_CH 1
 #define Server_CH 2
+
+#ifdef FS_DEBUG_PRINT
+#include "../../vmm/src/util/printf.h"
+#endif
 
 blk_queue_handle_t blk_queue_handle_memory;
 blk_queue_handle_t *blk_queue_handle = &blk_queue_handle_memory;
@@ -146,8 +149,10 @@ void notified(microkit_channel ch) {
         uint32_t id;
         while (!blk_resp_queue_empty(blk_queue_handle)) {
             blk_dequeue_resp(blk_queue_handle, &status, &addr, &count, &success_count, &id);
-            // Debug print
-            printf_("blk_dequeue_resp: addr: 0x%lx count: %d success_count: %d ID: %d\n", addr, count, success_count, id);
+            
+            #ifdef FS_DEBUG_PRINT
+            printf_("blk_dequeue_resp: status: %d addr: 0x%lx count: %d success_count: %d ID: %d\n", status, addr, count, success_count, id);
+            #endif
 
             FiberPool_SetArgs(RequestPool[id].handle, (void* )(status));
             Fiber_wake(RequestPool[id].handle);

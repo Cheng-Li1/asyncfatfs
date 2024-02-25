@@ -11,6 +11,8 @@
 #include <stdbool.h>
 #include "fence.h"
 
+// #define FS_DEBUG_PRINT
+
 /* Maximum number of slots in the request queue. Can be configured. */
 #define BLK_REQ_QUEUE_SIZE 1024
 /* Maximum number of slots in the response queue. Can be configured. */
