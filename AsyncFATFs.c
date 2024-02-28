@@ -177,13 +177,15 @@ void notified(microkit_channel ch) {
         // Then decide to yield() or not
         // And should only send back notification to blk device driver if at least one coroutine is block waiting
         blk_request_pushed = false;
+
+        Fiber_yield();
+        
         /** 
         If the code below get executed, then all the working coroutines are either blocked or finished.
         So the code below would send the result back to client through SDDF and do the cleanup for finished 
         coroutines. After that, the main coroutine coroutine would block wait on new requests or server sending
         responses.
-       **/
-        Fiber_yield();
+        **/
         if (blk_request_pushed == true) {
             microkit_notify(Server_CH);
         }
