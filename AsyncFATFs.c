@@ -162,15 +162,12 @@ void notified(microkit_channel ch) {
     default:
         return;
     }
-    /** 
-       If the code below get executed, then all the working coroutines are either blocked or finished.
-       So the code below would send the result back to client through SDDF and do the cleanup for finished 
-       coroutines. After that, the main coroutine coroutine would block wait on new requests or server sending
-       responses.
-    **/
+
     int32_t index;
     int32_t i;
+    // This variable track if the fs should send back reply to the file system client
     bool Client_have_replies = false;
+    // This variable track if there are new requests being pushed into the couroutine pool or not
     bool New_request_pushed = true;
     /**
       I assume this big while loop is the confusing and critical part for dispatching coroutines and send back the results.
@@ -180,6 +177,12 @@ void notified(microkit_channel ch) {
         // Then decide to yield() or not
         // And should only send back notification to blk device driver if at least one coroutine is block waiting
         blk_request_pushed = false;
+        /** 
+        If the code below get executed, then all the working coroutines are either blocked or finished.
+        So the code below would send the result back to client through SDDF and do the cleanup for finished 
+        coroutines. After that, the main coroutine coroutine would block wait on new requests or server sending
+        responses.
+       **/
         Fiber_yield();
         if (blk_request_pushed == true) {
             microkit_notify(Server_CH);
