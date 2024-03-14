@@ -1,6 +1,7 @@
 #include "AsyncFATFs.h"
 #include "ff15/source/ff.h"
 #include "FiberPool/FiberPool.h"
+#include <stdbool.h>
 
 /*
 This file define a bunch of wrapper functions of FATFs functions so thos functions can be run in the 
@@ -218,5 +219,113 @@ void f_getfree_async() {
     struct f_getfree_s* args = Fiber_GetArgs();
     args->RET = f_getfree(args->path, args->nclst, args->fatfs);
     Function_Fill_Response(args, args->RET, 0, 0);
+    Fiber_kill();
+}
+
+# define MAX_FATFS 1
+# define MAX_OPENED_FILENUM 128
+# define MAX_OPENED_DIRNUM 128
+
+static FATFS Fatfs[MAX_FATFS];
+
+static bool File_FreeList[MAX_OPENED_FILENUM];
+static FIL Files[MAX_OPENED_FILENUM];
+
+static bool Dirs_FreeList[MAX_OPENED_DIRNUM];
+static DIR Dirs[MAX_OPENED_DIRNUM];
+
+uint32_t Find_FreeFile() {
+    uint32_t i;
+    for (i = 0; i < MAX_OPENED_FILENUM; i++) {
+        if (File_FreeList[i] == 0) {
+            return i;
+        }
+    }
+    return i;
+}
+
+// Change here later to support more than one FAT volumes
+void fat_mount() {
+    uint64_t *args = Fiber_GetArgs();
+    FRESULT RET = FR_TIMEOUT;
+    RET = f_mount(&(Fatfs[0]), "", 1);
+    Function_Fill_Response(args, RET, 0, 0);
+    Fiber_kill();
+}
+
+void fat_open() {
+    uint64_t *args = Fiber_GetArgs();
+    uint32_t fd = Find_FreeFile();
+    if (fd == MAX_OPENED_FILENUM) {
+        Function_Fill_Response(args, FR_TOO_MANY_OPEN_FILES, 0, 0);
+        Fiber_kill();
+    }
+    FIL* file = &(Files[fd]);
+
+    FRESULT RET = FR_TIMEOUT;
+    RET = f_open(file, (void *)args[0], args[1]);
+    
+    // Error handling
+    if (RET != FR_OK) {
+        Function_Fill_Response(args, RET, 0, 0);
+        Fiber_kill();
+    }
+    
+    // Set the position to 1 to indicate this file structure is in use
+    File_FreeList[fd] = 1;
+
+    Function_Fill_Response(args, RET, fd, 0);
+    Fiber_kill();
+}
+
+void fat_pwrite() {
+    uint64_t *args = Fiber_GetArgs();
+    uint64_t fd = args[0];
+    void* data = (void *) args[1];
+    uint64_t btw = args[2];
+    uint64_t offset = args[3];
+    
+    // Maybe add validation check of file descriptor here
+    FIL* file = &(Files[fd]);
+    FRESULT RET = FR_TIMEOUT;
+
+    RET = f_lseek(file, offset);
+
+    if (RET != FR_OK) {
+        Function_Fill_Response(args, RET, 0, 0);
+        Fiber_kill();
+    }
+    
+    uint32_t bw = 0;
+
+    RET = f_write(file, data, btw, &bw);
+
+    Function_Fill_Response(args, RET, bw, 0);
+    Fiber_kill();
+}
+
+void fat_pread() {
+    uint64_t *args = Fiber_GetArgs();
+    uint64_t fd = args[0];
+    void* data = (void *) args[1];
+    uint64_t btr = args[2];
+    uint64_t offset = args[3];
+    
+    // Maybe add validation check of file descriptor here
+    FIL* file = &(Files[fd]);
+    FRESULT RET = FR_TIMEOUT;
+
+    RET = f_lseek(file, offset);
+
+    if (RET != FR_OK) {
+        Function_Fill_Response(args, RET, 0, 0);
+        Fiber_kill();
+    }
+    
+    uint32_t br = 0;
+
+    RET = f_read(file, data, btr, &br);
+
+    Function_Fill_Response(args, RET, br, 0);
     Fiber_kill();
 }
