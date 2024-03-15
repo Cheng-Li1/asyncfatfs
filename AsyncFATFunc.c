@@ -2,6 +2,8 @@
 #include "ff15/source/ff.h"
 #include "FiberPool/FiberPool.h"
 #include <stdbool.h>
+#include <string.h>
+#include "libfssharedqueue/fs_shared_queue.h"
 
 /*
 This file define a bunch of wrapper functions of FATFs functions so thos functions can be run in the 
@@ -244,11 +246,20 @@ uint32_t Find_FreeFile() {
     return i;
 }
 
+uint32_t Find_FreeDir() {
+    uint32_t i;
+    for (i = 0; i < MAX_OPENED_DIRNUM; i++) {
+        if (Dirs_FreeList[i] == 0) {
+            return i;
+        }
+    }
+    return i;
+}
+
 // Change here later to support more than one FAT volumes
 void fat_mount() {
     uint64_t *args = Fiber_GetArgs();
-    FRESULT RET = FR_TIMEOUT;
-    RET = f_mount(&(Fatfs[0]), "", 1);
+    FRESULT RET = f_mount(&(Fatfs[0]), "", 1);
     Function_Fill_Response(args, RET, 0, 0);
     Fiber_kill();
 }
@@ -262,8 +273,7 @@ void fat_open() {
     }
     FIL* file = &(Files[fd]);
 
-    FRESULT RET = FR_TIMEOUT;
-    RET = f_open(file, (void *)args[0], args[1]);
+    FRESULT RET = f_open(file, (void *)args[0], args[1]);
     
     // Error handling
     if (RET != FR_OK) {
@@ -329,3 +339,122 @@ void fat_pread() {
     Function_Fill_Response(args, RET, br, 0);
     Fiber_kill();
 }
+
+void fat_close() {
+    uint64_t *args = Fiber_GetArgs();
+    uint64_t fd = args[0];
+
+    if (fd < 0 || fd >= MAX_OPENED_FILENUM) {
+        Function_Fill_Response(args, FR_INVALID_PARAMETER, 0, 0);
+        Fiber_kill();
+    }
+
+    FRESULT RET = f_close(&(Files[fd]));
+    if (RET == FR_OK) {
+        File_FreeList[fd] = 0;
+    }
+    Function_Fill_Response(args, RET, 0, 0);
+    Fiber_kill();
+}
+
+void fat_stat() {
+    uint64_t *args = Fiber_GetArgs();
+    
+    const void* filename = (void*) args[0];
+
+    struct sddf_fs_stat_64* file_stat = (void*)args[2];
+    FILINFO fileinfo;
+
+    FRESULT RET = f_stat(filename, &fileinfo);
+    if (RET != FR_OK) {
+        Function_Fill_Response(args, RET, 0, 0);
+        Fiber_kill();
+    }
+    
+    memset(file_stat, 0, sizeof(struct sddf_fs_stat_64));
+    file_stat->atime = fileinfo.ftime;
+    file_stat->ctime = fileinfo.ftime;
+    file_stat->mtime = fileinfo.ftime;
+    
+    file_stat->size = fileinfo.fsize;
+    file_stat->mode = fileinfo.fattrib;
+
+// Now we have only one fat volume, so we can hard code it here
+    file_stat->blksize = Fatfs[0].ssize;
+
+// This is wrong, study how is the structure of the mode
+    file_stat->mode = fileinfo.fattrib & 0040000;
+
+    
+    // To complete
+}
+
+void fat_rename() {
+    uint64_t *args = Fiber_GetArgs();
+    uint64_t fd = args[0];
+
+    const void* oldpath = (void*)args[0];
+    const void* newpath = (void*)args[2];
+    
+    FRESULT RET = f_rename(oldpath, newpath);
+   
+    Function_Fill_Response(args, RET, 0, 0);
+    Fiber_kill();
+}
+
+void fat_unlink() {
+    uint64_t *args = Fiber_GetArgs();
+
+    const void* path = (void*)(args[0]);
+
+    FRESULT RET = f_unlink(path);
+
+    Function_Fill_Response(args, RET, 0, 0);
+    Fiber_kill();
+}
+
+void fat_mkdir() {
+    uint64_t *args = Fiber_GetArgs();
+
+    const void* path = (void*)(args[0]);
+
+    FRESULT RET = f_mkdir(path);
+
+    Function_Fill_Response(args, RET, 0, 0);
+    Fiber_kill();
+}
+
+void fat_rmdir() {
+    uint64_t *args = Fiber_GetArgs();
+    const void* path = (void*)(args[0]);
+
+    FRESULT RET = f_rmdir(path);
+
+    Function_Fill_Response(args, RET, 0, 0);
+    Fiber_kill();
+}
+
+void fat_opendir() {
+    uint64_t *args = Fiber_GetArgs();
+    uint32_t fd = Find_FreeDir();
+    if (fd == MAX_OPENED_DIRNUM) {
+        Function_Fill_Response(args, FR_TOO_MANY_OPEN_FILES, 0, 0);
+        Fiber_kill();
+    }
+    DIR* dir = &(Dirs[fd]);
+
+    FRESULT RET = f_opendir(dir, (void *)args[0]);
+    
+    // Error handling
+    if (RET != FR_OK) {
+        Function_Fill_Response(args, RET, 0, 0);
+        Fiber_kill();
+    }
+    
+    // Set the position to 1 to indicate this file structure is in use
+    Dirs_FreeList[fd] = 1;
+
+    Function_Fill_Response(args, RET, fd, 0);
+    Fiber_kill();
+}
+
