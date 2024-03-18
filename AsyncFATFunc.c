@@ -357,6 +357,12 @@ void fat_close() {
     Fiber_kill();
 }
 
+// Mode attribute
+#define Directory 0040000
+#define Regularfile 0100000
+#define Blockdevice 0060000
+#define Socket 0140000
+
 void fat_stat() {
     uint64_t *args = Fiber_GetArgs();
     
@@ -377,16 +383,30 @@ void fat_stat() {
     file_stat->mtime = fileinfo.ftime;
     
     file_stat->size = fileinfo.fsize;
-    file_stat->mode = fileinfo.fattrib;
 
 // Now we have only one fat volume, so we can hard code it here
     file_stat->blksize = Fatfs[0].ssize;
 
-// This is wrong, study how is the structure of the mode
-    file_stat->mode = fileinfo.fattrib & 0040000;
+// Study how is the structure of the mode, just leave it for now
+    file_stat->mode = 0;
+    if (fileinfo.fattrib & AM_DIR) {
+        file_stat->mode |= 040755; // Directory with rwx for owner, rx for group and others
+    } else {
+        // Assume regular file, apply read-only attribute
+        file_stat->mode |= 0444; // Readable by everyone
+    }
+    // Adjust for AM_RDO, if applicable
+    if (fileinfo.fattrib & AM_RDO) {
+        // If read-only and it's not a directory, remove write permissions.
+        // Note: For directories, AM_RDO doesn't make sense to apply as "write"
+        // because directories need to be writable for creating/removing files.
+        if (!(fileinfo.fattrib & AM_DIR)) {
+            file_stat->mode &= ~0222; // Remove write permissions
+        }
+    }
 
-    
-    // To complete
+    Function_Fill_Response(args, RET, 0, 0);
+    Fiber_kill();
 }
 
 void fat_rename() {
@@ -458,3 +478,56 @@ void fat_opendir() {
     Fiber_kill();
 }
 
+void fat_readdir() {
+    uint64_t *args = Fiber_GetArgs();
+    
+    // Maybe add validation check of file descriptor here
+    uint64_t fd = args[0];
+    void* name = (void*)args[1];
+    
+    FILINFO fno;
+    FRESULT RET = f_readdir(&Dirs[fd], &fno);
+    
+    if (RET == FR_OK) {
+        strcpy(name, fno.fname);
+    }
+
+    Function_Fill_Response(args, RET, 0, 0);
+    Fiber_kill();    
+}
+
+void fat_rewinddir() {
+    uint64_t *args = Fiber_GetArgs();
+    
+    // Maybe add validation check of file descriptor here
+    uint64_t fd = args[0];
+
+    FRESULT RET = f_readdir(&Dirs[fd], 0);
+
+    Function_Fill_Response(args, RET, 0, 0);
+    Fiber_kill();
+}
+
+void fat_sync() {
+    uint64_t *args = Fiber_GetArgs();
+
+    // Maybe add validation check of file descriptor here
+    uint64_t fd = args[0];
+
+    FRESULT RET = f_sync(&(Files[fd]));
+
+    Function_Fill_Response(args, RET, 0, 0);
+    Fiber_kill();
+}
+
+void fat_closedir() {
+    uint64_t *args = Fiber_GetArgs();
+
+    // Maybe add validation check of file descriptor here
+    uint64_t fd = args[0];
+
+    FRESULT RET = f_closedir(&Dirs[fd]);
+
+    Function_Fill_Response(args, RET, 0, 0);
+    Fiber_kill();
+}
