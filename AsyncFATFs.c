@@ -30,6 +30,7 @@ blk_req_queue_t *request;
 blk_resp_queue_t *response;
 
 // Compromised code here
+// Config pointed to the SDDF_blk config
 blk_storage_info_t *config;
 
 void* Coroutine_STACK_ONE;
@@ -78,15 +79,25 @@ typedef struct FS_request{
 } FS_CMD;
 */
 
+// This operations list must be consistent with the file system protocol enum
 void (*operation_functions[])() = {
-    f_mount_async,
-    f_open_async,
-    f_close_async,
-    f_stat_async,
-    f_pread_async,
-    f_pwrite_async,
-    f_rename_async,
-    f_unlink_async
+    fat_mount,
+    fat_unmount,
+    fat_open,
+    fat_close,
+    fat_stat,
+    fat_pread,
+    fat_pwrite,
+    fat_rename,
+    fat_unlink,
+    fat_mkdir,
+    fat_rmdir,
+    fat_opendir,
+    fat_closedir,
+    fat_sync,
+    fat_seekdir,
+    fat_readdir,
+    fat_rewinddir,
 };
 
 static FSRequest RequestPool[MAX_COROUTINE_NUM];
@@ -113,6 +124,10 @@ void init(void) {
     // Have to make sure who initialize this SDDF queue
     blk_queue_init(blk_queue_handle, request, response, true, 
     BLK_REQ_QUEUE_SIZE, BLK_RESP_QUEUE_SIZE);
+    /*
+       This part of the code is for setting up the FiberPool(Coroutine pool) by
+       assign stacks and size of the stack to the pool
+    */
     struct stack_mem stackmem[4];
     stackmem[0].memory = Coroutine_STACK_ONE;
     stackmem[0].size = Coroutine_STACKSIZE;
@@ -125,17 +140,17 @@ void init(void) {
     FiberPool_init(stackmem, 4, 1);
 }
 
-// mimic microkit_channel
+// The notified function requires careful management of the state of the file system
 /*
   The filesystems should be blockwait for new message if and only if all of working
   coroutines are either free(no tasks assigned to them, no pending replies) or blocked in diskio.
-  If filesystem is blocked here and any working coroutines are free, then the FATfs_command_queue must
-  also be empty.
+  If the filesystem is blocked here and any working coroutines are free, then the FATfs_command_queue 
+  must also be empty.
 */
 void notified(microkit_channel ch) {
     //printf("FS IRQ received: %d\n", ch);
     union sddf_fs_message message;
-// Compromised code here, polling for server's state until it is ready
+    // Compromised code here, polling for server's state until it is ready
     while (!config->ready) {}
 
     switch (ch) {
