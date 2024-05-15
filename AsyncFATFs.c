@@ -195,6 +195,12 @@ void notified(microkit_channel ch) {
             return;
     }
 
+    // This variable track if the fs should send back reply to the file system client
+    bool Client_have_replies = false;
+    // Flag for determine if there are blk_requests pushed by the file system
+    // It is used to determine whether to notify the blk device driver
+    bool blk_request_pushed = false;
+    
     // Compromised code here, mount file system itself
     // This part can be a little bit ugly as I have not thought of mount the file system itself 
     // at the beginning of design, I assume the mount come from a request from the client
@@ -212,11 +218,7 @@ void notified(microkit_channel ch) {
 
     int32_t index;
     int32_t i;
-    // This variable track if the fs should send back reply to the file system client
-    bool Client_have_replies = false;
-    // Flag for determine if there are blk_requests pushed by the file system
-    // It is used to determine whether to notify the blk device driver
-    bool blk_request_pushed = false;
+
     // This variable track if there are new requests being popped from request queue and pushed into the couroutine pool or not
     bool New_request_popped = fat_mounted;
     /**
