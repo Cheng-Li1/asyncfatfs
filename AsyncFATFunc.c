@@ -29,22 +29,37 @@ FRESULT f_sync (FIL* fp);
 FRESULT f_mount (FATFS* fs, const TCHAR* path, BYTE opt);					
 */
 
-# define MAX_FATFS 1
-# define MAX_OPENED_FILENUM 128
-# define MAX_OPENED_DIRNUM 128
-
+/*
 static FATFS Fatfs[MAX_FATFS];
 
-static bool File_FreeList[MAX_OPENED_FILENUM];
+static bool File_BitList[MAX_OPENED_FILENUM];
 static FIL Files[MAX_OPENED_FILENUM];
 
-static bool Dirs_FreeList[MAX_OPENED_DIRNUM];
+static bool Dirs_BitList[MAX_OPENED_DIRNUM];
 static DIR Dirs[MAX_OPENED_DIRNUM];
+*/
+
+FATFS* Fatfs;
+bool* File_BitList;
+FIL* Files;
+bool* Dirs_BitList;
+DIR* Dirs;
+
+// Init the structure without using malloc
+void init_metadata(void* fs_metadata) {
+    char* base = (char*)fs_metadata;
+
+    Fatfs = (FATFS*)base;
+    File_BitList = (bool*)(base + sizeof(FATFS));
+    Files = (FIL*)(base + sizeof(FATFS) + sizeof(bool) * MAX_OPENED_FILENUM);
+    Dirs_BitList = (bool*)(base + sizeof(FATFS) + sizeof(bool) * MAX_OPENED_FILENUM + sizeof(FIL) * MAX_OPENED_FILENUM);
+    Dirs = (DIR*)(base + sizeof(FATFS) + sizeof(bool) * MAX_OPENED_FILENUM + sizeof(FIL) * MAX_OPENED_FILENUM + sizeof(bool) * MAX_OPENED_DIRNUM);
+}
 
 uint32_t Find_FreeFile() {
     uint32_t i;
     for (i = 0; i < MAX_OPENED_FILENUM; i++) {
-        if (File_FreeList[i] == 0) {
+        if (File_BitList[i] == 0) {
             return i;
         }
     }
@@ -54,7 +69,7 @@ uint32_t Find_FreeFile() {
 uint32_t Find_FreeDir() {
     uint32_t i;
     for (i = 0; i < MAX_OPENED_DIRNUM; i++) {
-        if (Dirs_FreeList[i] == 0) {
+        if (Dirs_BitList[i] == 0) {
             return i;
         }
     }
@@ -94,7 +109,7 @@ void fat_open() {
     }
     
     // Set the position to 1 to indicate this file structure is in use
-    File_FreeList[fd] = 1;
+    File_BitList[fd] = 1;
 
     Function_Fill_Response(args, RET, fd, 0);
     Fiber_kill();
@@ -163,7 +178,7 @@ void fat_close() {
 
     FRESULT RET = f_close(&(Files[fd]));
     if (RET == FR_OK) {
-        File_FreeList[fd] = 0;
+        File_BitList[fd] = 0;
     }
     Function_Fill_Response(args, RET, 0, 0);
     Fiber_kill();
@@ -285,7 +300,7 @@ void fat_opendir() {
     }
     
     // Set the position to 1 to indicate this file structure is in use
-    Dirs_FreeList[fd] = 1;
+    Dirs_BitList[fd] = 1;
 
     Function_Fill_Response(args, RET, fd, 0);
     Fiber_kill();
@@ -306,7 +321,7 @@ void fat_readdir() {
     }
 
     Function_Fill_Response(args, RET, 0, 0);
-    Fiber_kill();    
+    Fiber_kill();
 }
 
 void fat_rewinddir() {

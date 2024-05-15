@@ -27,6 +27,12 @@ typedef enum {
 #define First_data_bit 7
 #define Second_data_bit 8
 
+# define MAX_FATFS 1
+# define MAX_OPENED_FILENUM 128
+# define MAX_OPENED_DIRNUM 128
+
+void init_metadata(void* fs_metadata);
+
 void fat_mount();
 void fat_unmount();
 void fat_open();

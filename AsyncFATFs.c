@@ -38,9 +38,8 @@ void* Coroutine_STACK_TWO;
 void* Coroutine_STACK_THREE;
 void* Coroutine_STACK_FOUR;
 
-// Flag for determine if there are blk_requests pushed by the file system
-// It is used to determine whether to notify the blk device driver
-bool blk_request_pushed;
+// File system metadata region
+void* fs_metadata;
 
 // Flag for checking if the fat is mounted or not
 bool fat_mounted = false;
@@ -145,6 +144,9 @@ void init(void) {
     stackmem[3].size = Coroutine_STACKSIZE;
     FiberPool_init(stackmem, 4, 1);
     
+    // Init file system metadata
+    init_metadata(fs_metadata);
+
     // In init process, let the coroutine execuate a mount command
     // Compromised code here, mount file system itself
     // This part can be a little bit ugly as I have not thought of mount the file system itself 
@@ -212,6 +214,9 @@ void notified(microkit_channel ch) {
     int32_t i;
     // This variable track if the fs should send back reply to the file system client
     bool Client_have_replies = false;
+    // Flag for determine if there are blk_requests pushed by the file system
+    // It is used to determine whether to notify the blk device driver
+    bool blk_request_pushed = false;
     // This variable track if there are new requests being popped from request queue and pushed into the couroutine pool or not
     bool New_request_popped = fat_mounted;
     /**
@@ -221,8 +226,6 @@ void notified(microkit_channel ch) {
         // Performance bug here, should check if the reason being wake up is from notification from the blk device driver
         // Then decide to yield() or not
         // And should only send back notification to blk device driver if at least one coroutine is block waiting
-        blk_request_pushed = false;
-
         Fiber_yield();
         
         /** 
