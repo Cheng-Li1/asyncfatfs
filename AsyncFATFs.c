@@ -145,10 +145,14 @@ void init(void) {
     stackmem[3].size = Coroutine_STACKSIZE;
     FiberPool_init(stackmem, 4, 1);
     
-    // File system mount itself
+    // In init process, let the coroutine execuate a mount command
+    // Compromised code here, mount file system itself
+    // This part can be a little bit ugly as I have not thought of mount the file system itself 
+    // at the beginning of design, I assume the mount come from a request from the client
+    // But it turns out the file system should mount itself as the protocol suggests
     RequestPool[1].request_id = 1;
     RequestPool[1].stat = INUSE;
-    FiberPool_push(fat_mount, NULL, 2, &(RequestPool[1].handle));
+    FiberPool_push(fat_mount, RequestPool[1].args, 2, &(RequestPool[1].handle));
 }
 
 // The notified function requires careful management of the state of the file system
