@@ -23,8 +23,8 @@
 blk_queue_handle_t blk_queue_handle_memory;
 blk_queue_handle_t *blk_queue_handle = &blk_queue_handle_memory;
 
-struct sddf_fs_queue *FATfs_command_queue;
-struct sddf_fs_queue *FATfs_completion_queue;
+struct sddf_fs_queue *Fatfs_command_queue;
+struct sddf_fs_queue *Fatfs_completion_queue;
 
 blk_req_queue_t *request;
 blk_resp_queue_t *response;
@@ -38,7 +38,12 @@ void* Coroutine_STACK_TWO;
 void* Coroutine_STACK_THREE;
 void* Coroutine_STACK_FOUR;
 
+// Flag for determine if there are blk_requests pushed by the file system
+// It is used to determine whether to notify the blk device driver
 bool blk_request_pushed;
+
+// Flag for checking if the fat is mounted or not
+bool fat_mounted = false;
 
 typedef enum {
     FREE,
@@ -48,6 +53,9 @@ typedef enum {
 typedef struct FS_request{
     /* Client side cmd info */
     FS_CMD cmd;
+    // This args array have 9 elements
+    // The first 6 are for 6 input args in file system protocol
+    // The last 3 are for returning operation status and return data
     uint64_t args[9];
     uint64_t request_id;
     /* FiberPool metadata */
@@ -81,8 +89,6 @@ typedef struct FS_request{
 
 // This operations list must be consistent with the file system protocol enum
 void (*operation_functions[])() = {
-    fat_mount,
-    fat_unmount,
     fat_open,
     fat_close,
     fat_stat,
@@ -138,13 +144,18 @@ void init(void) {
     stackmem[3].memory = Coroutine_STACK_FOUR;
     stackmem[3].size = Coroutine_STACKSIZE;
     FiberPool_init(stackmem, 4, 1);
+    
+    // File system mount itself
+    RequestPool[1].request_id = 1;
+    RequestPool[1].stat = INUSE;
+    FiberPool_push(fat_mount, NULL, 2, &(RequestPool[1].handle));
 }
 
 // The notified function requires careful management of the state of the file system
 /*
   The filesystems should be blockwait for new message if and only if all of working
   coroutines are either free(no tasks assigned to them, no pending replies) or blocked in diskio.
-  If the filesystem is blocked here and any working coroutines are free, then the FATfs_command_queue 
+  If the filesystem is blocked here and any working coroutines are free, then the Fatfs_command_queue 
   must also be empty.
 */
 void notified(microkit_channel ch) {
@@ -154,40 +165,55 @@ void notified(microkit_channel ch) {
     while (!config->ready) {}
 
     switch (ch) {
-    case Client_CH: 
-        break;
-    case Server_CH: {
-        blk_response_status_t status;
-        uintptr_t addr;
-        uint16_t count;
-        uint16_t success_count;
-        uint32_t id;
-        while (!blk_resp_queue_empty(blk_queue_handle)) {
-            blk_dequeue_resp(blk_queue_handle, &status, &addr, &count, &success_count, &id);
-            
-            #ifdef FS_DEBUG_PRINT
-            printf_("blk_dequeue_resp: status: %d addr: 0x%lx count: %d success_count: %d ID: %d\n", status, addr, count, success_count, id);
-            #endif
+        case Client_CH: 
+            break;
+        case Server_CH: {
+            blk_response_status_t status;
+            uintptr_t addr;
+            uint16_t count;
+            uint16_t success_count;
+            uint32_t id;
+            while (!blk_resp_queue_empty(blk_queue_handle)) {
+                blk_dequeue_resp(blk_queue_handle, &status, &addr, &count, &success_count, &id);
+                
+                #ifdef FS_DEBUG_PRINT
+                printf_("blk_dequeue_resp: status: %d addr: 0x%lx count: %d success_count: %d ID: %d\n", status, addr, count, success_count, id);
+                #endif
 
-            FiberPool_SetArgs(RequestPool[id].handle, (void* )(status));
-            Fiber_wake(RequestPool[id].handle);
+                FiberPool_SetArgs(RequestPool[id].handle, (void* )(status));
+                Fiber_wake(RequestPool[id].handle);
+            }
+            break;
         }
-        break;
+        default:
+            return;
     }
-    default:
-        return;
+
+    // Compromised code here, mount file system itself
+    // This part can be a little bit ugly as I have not thought of mount the file system itself 
+    // at the beginning of design, I assume the mount come from a request from the client
+    // But it turns out the file system should mount itself as the protocol suggests
+    if (!fat_mounted) {
+        Fiber_yield();
+        if (blk_request_pushed == true) {
+            microkit_notify(Server_CH);
+        }
+        if (RequestPool[1].handle == INVALID_COHANDLE && RequestPool[1].stat == INUSE) {
+            RequestPool[1].stat = FREE;
+            fat_mounted = true;
+        }
     }
 
     int32_t index;
     int32_t i;
     // This variable track if the fs should send back reply to the file system client
     bool Client_have_replies = false;
-    // This variable track if there are new requests being pushed into the couroutine pool or not
-    bool New_request_pushed = true;
+    // This variable track if there are new requests being popped from request queue and pushed into the couroutine pool or not
+    bool New_request_popped = fat_mounted;
     /**
       I assume this big while loop is the confusing and critical part for dispatching coroutines and send back the results.
     **/
-    while (New_request_pushed) {
+    while (New_request_popped) {
         // Performance bug here, should check if the reason being wake up is from notification from the blk device driver
         // Then decide to yield() or not
         // And should only send back notification to blk device driver if at least one coroutine is block waiting
@@ -201,18 +227,15 @@ void notified(microkit_channel ch) {
         coroutines. After that, the main coroutine coroutine would block wait on new requests or server sending
         responses.
         **/
-        if (blk_request_pushed == true) {
-            microkit_notify(Server_CH);
-        }
         /*
           This for loop check if there are coroutines finished and send the result back
         */
-        New_request_pushed = false;
+        New_request_popped = false;
         for (i = 1; i < MAX_COROUTINE_NUM; i++) {
             if (RequestPool[i].handle == INVALID_COHANDLE && RequestPool[i].stat == INUSE) {
                 message.completion.request_id = RequestPool[i].request_id;
                 Fill_Client_Response(&message, &(RequestPool[i]));
-                sddf_fs_queue_push(FATfs_completion_queue, message);
+                sddf_fs_queue_push(Fatfs_completion_queue, message);
                 RequestPool[i].stat= FREE;
                 Client_have_replies = true;
             }
@@ -223,17 +246,21 @@ void notified(microkit_channel ch) {
         */
         while (true) {
             index = FiberPool_FindFree();
-            if (index == INVALID_COHANDLE || sddf_fs_queue_isEmpty(FATfs_command_queue) 
-                  || sddf_fs_queue_isFull(FATfs_completion_queue)) {
+            if (index == INVALID_COHANDLE || sddf_fs_queue_isEmpty(Fatfs_command_queue) 
+                  || sddf_fs_queue_isFull(Fatfs_completion_queue)) {
                break;
             }
-            sddf_fs_queue_pop(FATfs_command_queue, &message);
+            sddf_fs_queue_pop(Fatfs_command_queue, &message);
             SetUp_request(index, message);
             RequestPool[index].stat = INUSE;
-            New_request_pushed = true;
+            New_request_popped = true;
         }
     }
+    // If there are replies to client or server, reply back here
     if (Client_have_replies == true) {
         microkit_notify(Client_CH);
+    }
+    if (blk_request_pushed == true) {
+        microkit_notify(Server_CH);
     }
 }
