@@ -65,6 +65,11 @@ DRESULT disk_ioctl (BYTE pdrv, BYTE cmd, void* buff) {
     return res;
 }
 
+/*
+	The disk operation part have not changed to deal with sector size and BLK_TRANSFER_SIZE
+	Currently for testing file system, just set the BLK_TRANSFER_SIZE in blk queue.h to 512
+    As all SD cards use 512 byte sector size
+*/
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
     DRESULT res;
 	switch (pdrv) {
