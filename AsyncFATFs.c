@@ -254,8 +254,8 @@ void notified(microkit_channel ch) {
         */
         while (true) {
             index = FiberPool_FindFree();
-            if (index == INVALID_COHANDLE || sddf_fs_queue_isEmpty(Fatfs_command_queue) 
-                  || sddf_fs_queue_isFull(Fatfs_completion_queue)) {
+            if (index == INVALID_COHANDLE || sddf_fs_queue_empty(Fatfs_command_queue) 
+                  || sddf_fs_queue_empty(Fatfs_completion_queue)) {
                break;
             }
             sddf_fs_queue_pop(Fatfs_command_queue, &message);

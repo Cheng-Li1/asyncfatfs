@@ -1,4 +1,5 @@
-# File system building process
+# File system makefile
+# Not working due to the previous modification
 FF_DIR := ../../fs/fat/
 
 FatFs_OBJS :=   ff.o \

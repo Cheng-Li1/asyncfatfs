@@ -18,27 +18,6 @@ void Function_Fill_Response(void* data, FRESULT result, uint64_t RETDATA, uint64
     return;
 }
 
-/*
-FRESULT f_open (FIL* fp, const TCHAR* path, BYTE mode);				
-FRESULT f_close (FIL* fp);											
-FRESULT f_read (FIL* fp, void* buff, UINT btr, UINT* br);			
-FRESULT f_write (FIL* fp, const void* buff, UINT btw, UINT* bw);	
-FRESULT f_lseek (FIL* fp, FSIZE_t ofs);								
-FRESULT f_truncate (FIL* fp);										
-FRESULT f_sync (FIL* fp);
-FRESULT f_mount (FATFS* fs, const TCHAR* path, BYTE opt);					
-*/
-
-/*
-static FATFS Fatfs[MAX_FATFS];
-
-static bool File_BitList[MAX_OPENED_FILENUM];
-static FIL Files[MAX_OPENED_FILENUM];
-
-static bool Dirs_BitList[MAX_OPENED_DIRNUM];
-static DIR Dirs[MAX_OPENED_DIRNUM];
-*/
-
 FATFS* Fatfs;
 bool* File_BitList;
 FIL* Files;
