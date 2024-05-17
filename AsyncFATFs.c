@@ -1,9 +1,9 @@
 #include "AsyncFATFs.h"
 #include "ff15/source/ff.h"
 #include "ff15/source/diskio.h"
-#include "libblocksharedqueue/blk_shared_queue.h"
+#include "../../../dep/sddf/include/sddf/blk/queue.h"
 #include "FiberPool/FiberPool.h"
-#include "libfssharedqueue/fs_shared_queue.h"
+#include "../../../include/lions/fs/protocol.h"
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -15,6 +15,8 @@
 
 #define Client_CH 1
 #define Server_CH 2
+
+#define SDDF_ARGS_SIZE 6
 
 #ifdef FS_DEBUG_PRINT
 #include "../../vmm/src/util/printf.h"
@@ -51,7 +53,7 @@ typedef enum {
 
 typedef struct FS_request{
     /* Client side cmd info */
-    FS_CMD cmd;
+    uint64_t cmd;
     // This args array have 9 elements
     // The first 6 are for 6 input args in file system protocol
     // The last 3 are for returning operation status and return data
@@ -127,8 +129,7 @@ void SetUp_request(int32_t index, union sddf_fs_message message) {
 void init(void) {
     // Init the block device queue
     // Have to make sure who initialize this SDDF queue
-    blk_queue_init(blk_queue_handle, request, response, true, 
-    BLK_REQ_QUEUE_SIZE, BLK_RESP_QUEUE_SIZE);
+    blk_queue_init(blk_queue_handle, request, response, BLK_QUEUE_SIZE);
     /*
        This part of the code is for setting up the FiberPool(Coroutine pool) by
        assign stacks and size of the stack to the pool
@@ -175,12 +176,10 @@ void notified(microkit_channel ch) {
             break;
         case Server_CH: {
             blk_response_status_t status;
-            uintptr_t addr;
-            uint16_t count;
             uint16_t success_count;
             uint32_t id;
             while (!blk_resp_queue_empty(blk_queue_handle)) {
-                blk_dequeue_resp(blk_queue_handle, &status, &addr, &count, &success_count, &id);
+                blk_dequeue_resp(blk_queue_handle, &status, &success_count, &id);
                 
                 #ifdef FS_DEBUG_PRINT
                 printf_("blk_dequeue_resp: status: %d addr: 0x%lx count: %d success_count: %d ID: %d\n", status, addr, count, success_count, id);

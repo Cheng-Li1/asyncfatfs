@@ -2,7 +2,7 @@
 #include "ff15/source/diskio.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include "libblocksharedqueue/blk_shared_queue.h"
+#include "../../../dep/sddf/include/sddf/blk/queue.h"
 #include "FiberPool/FiberPool.h"
 #ifdef FS_DEBUG_PRINT
 #include "../../vmm/src/util/printf.h"
